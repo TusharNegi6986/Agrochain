@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agri-Trace - Blockchain Supply Chain Demo</title>
+    <!-- Load Tailwind CSS via CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load React and ReactDOM Libraries -->
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+    <!-- Load Babel for JSX compilation in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Load QR Code library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.1/qrcode.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+    // --- START: Removed import statements and using global React variables (React, useState, useEffect) ---
+
+    // --- Utility Functions (Simulated Blockchain) ---
+
+    // In-memory array acting as the immutable ledger
+    const initialBlockchain = [{
+      id: 0, // Product ID 0 is a placeholder/genesis
+      productType: "Genesis Block",
+      originLocation: "N/A",
+      owner: "0x0000000000000000000000000000000000000000",
+      history: [
+        {
+          description: "Blockchain initialized.",
+          timestamp: Date.now(),
+          actor: "System"
+        }
+      ]
+    }];
+
+    // Use a function to safely load and save state, especially for persistence simulation
+    const getInitialState = () => {
+      try {
+        const storedState = localStorage.getItem('agriTraceLedger');
+        return storedState ? JSON.parse(storedState) : initialBlockchain;
+      } catch (error) {
+        console.error("Error accessing localStorage, using initial state:", error);
+        return initialBlockchain;
+      }
+    };
+
+    const saveState = (state) => {
+      try {
+        localStorage.setItem('agriTraceLedger', JSON.stringify(state));
+      } catch (error) {
+        console.error("Error saving state to localStorage:", error);
+      }
+    };
+
+    // Global State Management (Simulating the blockchain)
+    let blockchain = getInitialState();
+
+    const updateBlockchain = (newBlockchain) => {
+      blockchain = newBlockchain;
+      saveState(newBlockchain);
+    };
+
+    // Simulated Account Addresses for Demo Credibility
+    const ACTORS = {
+      FARMER: "0xFarmer4dC818274092b3D42eA8a3e753443a9d9e",
+      DISTRIBUTOR: "0xDistributorBEfC2790B551E840776b3D5B932F231D1C",
+      CONSUMER: "0xConsumer5B7D7c81d83A201C9C72C331E6d02905156B1A",
+    };
+
+    /**
+     * Adds a new product record to the simulated blockchain.
+     * @returns {number} The ID of the newly created product.
+     */
+    const addProductToLedger = (productType, originLocation) => {
+      const newProductId = blockchain.length;
+      const newProduct = {
+        id: newProductId,
+        productType,
+        originLocation,
+        owner: ACTORS.FARMER,
+        history: [
+          {
+            description: `Product Registered: ${productType}`,
+            timestamp: Date.now(),
+            actor: ACTORS.FARMER,
+          },
+        ],
+      };
+      updateBlockchain([...blockchain, newProduct]);
+      return newProductId;
+    };
+
+    /**
+     * Adds a new event to an existing product's history.
+     */
+    const addEventToLedger = (productId, eventDescription, actorRole) => {
+      const index = blockchain.findIndex(p => p.id === parseInt(productId));
+      if (index === -1) return false;
+
+      const updatedBlockchain = [...blockchain];
+      const newEvent = {
+        description: eventDescription,
+        timestamp: Date.now(),
+        actor: ACTORS[actorRole],
+      };
+
+      updatedBlockchain[index].history.push(newEvent);
+      updateBlockchain(updatedBlockchain);
+      return true;
+    };
+
+    /**
+     * Retrieves a product's full data and history.
+     */
+    const getProductHistory = (productId) => {
+      return blockchain.find(p => p.id === parseInt(productId));
+    };
+
+    /**
+     * Utility function to handle cross-environment clipboard copy
+     */
+    const copyToClipboard = (text) => {
+      // Use a fallback method for environments where the Clipboard API is blocked (like iframes)
+      const tempInput = document.createElement('textarea');
+      tempInput.value = text;
+      tempInput.style.position = 'absolute';
+      tempInput.style.left = '-9999px';
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      try {
+        document.execCommand('copy');
+        alert('Product ID copied to clipboard: ' + text);
+      } catch (err) {
+        alert('Failed to copy text. Please copy manually: ' + text);
+      } finally {
+        document.body.removeChild(tempInput);
+      }
+    };
+
+    // --- Main App Component ---
+    const App = () => {
+      const [view, setView] = React.useState('home');
+      const [ledgerVersion, setLedgerVersion] = React.useState(blockchain.length);
+
+      // Function to re-render the app when the global ledger state changes
+      const refreshLedger = () => {
+        setLedgerVersion(blockchain.length);
+      };
+
+      const renderView = () => {
+        switch (view) {
+          case 'farmer':
+            return <FarmerForm setView={setView} refreshLedger={refreshLedger} />;
+          case 'distributor':
+            return <DistributorForm setView={setView} refreshLedger={refreshLedger} />;
+          case 'consumer':
+            return <ConsumerView setView={setView} />;
+          default:
+            return <Home setView={setView} />;
+        }
+      };
+
+      return (
+        <div className="bg-gray-100 min-h-screen flex flex-col items-center p-4">
+          <header className="w-full max-w-4xl bg-white p-6 rounded-lg shadow-md mb-6 flex justify-between items-center">
+            <h1 className="text-3xl font-bold text-gray-800">
+              Agri-Trace <span className="text-sm font-medium text-blue-500">(v{ledgerVersion})</span>
+            </h1>
+            <nav className="space-x-4">
+              <button onClick={() => setView('home')} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors">
+                Home
+              </button>
+              <button onClick={() => setView('farmer')} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-green-600 hover:bg-green-700 transition-colors">
+                Farmer
+              </button>
+              <button onClick={() => setView('distributor')} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 transition-colors">
+                Distributor
+              </button>
+              <button onClick={() => setView('consumer')} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors">
+                Consumer
+              </button>
+            </nav>
+          </header>
+          <main className="w-full max-w-4xl">
+            {renderView()}
+          </main>
+        </div>
+      );
+    };
+
+    // --- Home Component ---
+    const Home = ({ setView }) => {
+      return (
+        <div className="bg-white p-8 rounded-lg shadow-md text-center">
+          <h2 className="text-2xl font-semibold text-gray-700 mb-4">Welcome to Agri-Trace</h2>
+          <p className="text-gray-600 mb-6">
+            A decentralized platform for transparent and secure agricultural supply chains.
+            Select a role above to get started. **(Using Simulated Local Blockchain)**
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button onClick={() => setView('farmer')} className="p-6 bg-green-50 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+              <h3 className="text-xl font-semibold text-green-700">Farmer</h3>
+              <p className="text-green-600 text-sm mt-2">Add new produce to the blockchain.</p>
+            </button>
+            <button onClick={() => setView('distributor')} className="p-6 bg-purple-50 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+              <h3 className="text-xl font-semibold text-purple-700">Distributor</h3>
+              <p className="text-purple-600 text-sm mt-2">Update product status in transit.</p>
+            </button>
+            <button onClick={() => setView('consumer')} className="p-6 bg-indigo-50 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+              <h3 className="text-xl font-semibold text-indigo-700">Consumer</h3>
+              <p className="text-indigo-600 text-sm mt-2">Trace a product's journey from farm to table.</p>
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    // --- Farmer Form Component ---
+    const FarmerForm = ({ setView, refreshLedger }) => {
+      const [productType, setProductType] = React.useState('');
+      const [originLocation, setOriginLocation] = React.useState('');
+      const [message, setMessage] = React.useState('');
+      const [loading, setLoading] = React.useState(false);
+      const [newlyCreatedId, setNewlyCreatedId] = React.useState(null);
+      const [qrCodeData, setQrCodeData] = React.useState(null);
+
+      // Function to safely generate the QR code
+      const generateQRCode = (id, type, location) => {
+        const qrData = `Product ID: ${id} | Type: ${type} | Location: ${location}`;
+        const qrCanvas = document.getElementById('qrcode-canvas');
+
+        if (qrCanvas && typeof window.QRCode !== 'undefined') {
+          qrCanvas.innerHTML = '';
+          new window.QRCode(qrCanvas, {
+            text: qrData,
+            width: 128,
+            height: 128,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: window.QRCode.CorrectLevel.H
+          });
+          setQrCodeData(true);
+          return true;
+        }
+        return false;
+      };
+
+      // Effect to manage QR code generation and retry logic
+      React.useEffect(() => {
+        let intervalId;
+
+        if (newlyCreatedId !== null) {
+          const attemptGenerate = () => {
+            if (generateQRCode(newlyCreatedId, productType, originLocation)) {
+              clearInterval(intervalId); // Success, stop retrying
+            } else {
+              // If generation failed, set state to indicate error (will retry on next interval)
+              setQrCodeData(false);
+            }
+          };
+
+          // Attempt generation immediately
+          attemptGenerate();
+          
+          // Retry every 200ms for robustness against slow script loading
+          intervalId = setInterval(attemptGenerate, 200);
+        }
+
+        // Cleanup function to clear the interval when the component unmounts or state changes
+        return () => {
+          if (intervalId) {
+            clearInterval(intervalId);
+          }
+        };
+      }, [newlyCreatedId, productType, originLocation]);
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        setMessage('');
+        setLoading(true);
+        setNewlyCreatedId(null);
+        setQrCodeData(null);
+
+        // Simulate blockchain transaction delay
+        setTimeout(() => {
+          try {
+            const newId = addProductToLedger(productType, originLocation);
+            setNewlyCreatedId(newId);
+            setMessage(`Success! Product registration complete.`);
+            refreshLedger();
+          } catch (error) {
+            setMessage("Error registering product.");
+            console.error("Ledger error:", error);
+          } finally {
+            setLoading(false);
+          }
+        }, 500);
+      };
+
+      const handleCopy = () => {
+        if (newlyCreatedId !== null) {
+          copyToClipboard(newlyCreatedId.toString());
+        }
+      };
+
+      return (
+        <div className="bg-white p-8 rounded-lg shadow-md">
+          <h2 className="text-2xl font-semibold text-gray-700 mb-6">Register New Produce</h2>
+
+          {newlyCreatedId === null ? (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="productType" className="block text-sm font-medium text-gray-700">Product Type</label>
+                <input
+                  type="text"
+                  id="productType"
+                  value={productType}
+                  onChange={(e) => setProductType(e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 p-2"
+                  placeholder="e.g., Organic Apples"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="originLocation" className="block text-sm font-medium text-gray-700">Origin Location</label>
+                <input
+                  type="text"
+                  id="originLocation"
+                  value={originLocation}
+                  onChange={(e) => setOriginLocation(e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 p-2"
+                  placeholder="e.g., Farm #42, Nashik, India"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
+              >
+                {loading ? 'Adding Product to Ledger...' : 'Add Product to Ledger'}
+              </button>
+            </form>
+          ) : (
+            <div className="mt-4 p-6 bg-green-50 border-l-4 border-green-500 rounded-lg shadow-inner">
+              <h3 className="text-lg font-semibold text-green-800 mb-2">Registration Successful!</h3>
+              <p className="text-green-700 mb-4">{message}</p>
+
+              <div className="flex items-start justify-between bg-white p-4 rounded-md shadow-sm mb-4">
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-gray-500">UNIQUE PRODUCT ID</p>
+                  <p className="text-3xl font-bold text-green-600 break-all">{newlyCreatedId}</p>
+                </div>
+                {/* QR Code Canvas */}
+                <div id="qrcode-canvas" className="w-32 h-32 ml-4 flex items-center justify-center">
+                  {qrCodeData === false && <p className="text-xs text-red-500 text-center">QR failed. Try again.</p>}
+                </div>
+              </div>
+              
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleCopy}
+                  className="flex-1 flex items-center justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z" />
+                    <path d="M5 3a2 2 0 00-2 2v6a2 2 0 002 2V5h8a2 2 0 00-2-2H5z" />
+                  </svg>
+                  Copy ID
+                </button>
+                <button
+                  onClick={() => { setView('home'); }}
+                  className="flex-1 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                >
+                  Back to Home
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // --- Distributor Form Component ---
+    const DistributorForm = ({ setView, refreshLedger }) => {
+      const [productId, setProductId] = React.useState('');
+      const [eventDescription, setEventDescription] = React.useState('');
+      const [message, setMessage] = React.useState('');
+      const [loading, setLoading] = React.useState(false);
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        setMessage('');
+        setLoading(true);
+
+        // Simulate blockchain transaction delay
+        setTimeout(() => {
+          const success = addEventToLedger(productId, eventDescription, 'DISTRIBUTOR');
+          if (success) {
+            setMessage(`Success! Event added to product ${productId}.`);
+            refreshLedger();
+            setTimeout(() => {
+              setProductId('');
+              setEventDescription('');
+              setMessage('');
+            }, 3000);
+          } else {
+            setMessage(`Error: Product ID ${productId} not found.`);
+          }
+          setLoading(false);
+        }, 500);
+      };
+
+      return (
+        <div className="bg-white p-8 rounded-lg shadow-md">
+          <h2 className="text-2xl font-semibold text-gray-700 mb-6">Update Product Status</h2>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="productId" className="block text-sm font-medium text-gray-700">Product ID</label>
+              <input
+                type="number"
+                id="productId"
+                value={productId}
+                onChange={(e) => setProductId(e.target.value)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 p-2"
+                placeholder="Enter Product ID (e.g., 1, 2, 3)"
+                required
+                min="1"
+              />
+            </div>
+            <div>
+              <label htmlFor="eventDescription" className="block text-sm font-medium text-gray-700">Event Description</label>
+              <input
+                type="text"
+                id="eventDescription"
+                value={eventDescription}
+                onChange={(e) => setEventDescription(e.target.value)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 p-2"
+                placeholder="e.g., Arrived at cold storage"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50"
+            >
+              {loading ? 'Adding Event to Ledger...' : 'Add Event to Ledger'}
+            </button>
+          </form>
+          {message && (
+            <p className={`mt-4 text-center text-sm font-medium ${message.startsWith('Error') ? 'text-red-600' : 'text-gray-600'}`}>
+              {message}
+            </p>
+          )}
+        </div>
+      );
+    };
+
+    // --- Consumer View Component ---
+    const ConsumerView = () => {
+      const [productId, setProductId] = React.useState('');
+      const [productData, setProductData] = React.useState(null);
+      const [message, setMessage] = React.useState('');
+      const [loading, setLoading] = React.useState(false);
+
+      const handleSearch = (e) => {
+        e.preventDefault();
+        setProductData(null);
+        setMessage('');
+        setLoading(true);
+
+        // Simulate network delay
+        setTimeout(() => {
+          const data = getProductHistory(productId);
+
+          if (data) {
+            // Exclude the genesis block (ID 0) from results
+            if (data.id === 0) {
+              setMessage(`Error: Product ID 0 is reserved for the genesis block.`);
+              setProductData(null);
+            } else {
+                setProductData(data);
+            }
+          } else {
+            setMessage(`Error: Product ID ${productId} not found on the ledger.`);
+          }
+          setLoading(false);
+        }, 500);
+      };
+
+      return (
+        <div className="bg-white p-8 rounded-lg shadow-md">
+          <h2 className="text-2xl font-semibold text-gray-700 mb-6">Trace a Product</h2>
+
+          <form onSubmit={handleSearch} className="space-y-4 mb-8">
+            <div>
+              <label htmlFor="traceId" className="block text-sm font-medium text-gray-700">Product ID (Scan QR or Enter ID)</label>
+              <input
+                type="number"
+                id="traceId"
+                value={productId}
+                onChange={(e) => setProductId(e.target.value)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2"
+                placeholder="Enter Product ID (e.g., 1, 2, 3)"
+                required
+                min="1"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+            >
+              {loading ? 'Tracing Ledger...' : 'Trace Product'}
+            </button>
+          </form>
+
+          {message && (
+            <p className={`mt-4 text-center text-sm font-medium ${message.startsWith('Error') ? 'text-red-600' : 'text-gray-600'}`}>
+              {message}
+            </p>
+          )}
+
+          {productData && productData.id !== 0 && (
+            <div className="space-y-6">
+              <div className="bg-gray-50 p-6 rounded-lg shadow-inner">
+                <h3 className="text-xl font-bold text-gray-800 mb-2">Product Details</h3>
+                <p className="text-gray-600">
+                  <span className="font-semibold">Product Type:</span> {productData.productType}
+                </p>
+                <p className="text-gray-600">
+                  <span className="font-semibold">Origin Location:</span> {productData.originLocation}
+                </p>
+                <p className="text-gray-600 break-all">
+                  <span className="font-semibold">Registered by (Address):</span> {productData.owner}
+                </p>
+                <p className="text-gray-600">
+                  <span className="font-semibold">Total Events:</span> {productData.history.length}
+                </p>
+              </div>
+
+              <h3 className="text-xl font-bold text-gray-800">Product Journey Timeline</h3>
+              <ol className="relative border-s border-gray-300 dark:border-gray-700 ml-4 pl-4">
+                {productData.history.map((event, index) => (
+                  <li key={index} className="mb-8">
+                    <span className="absolute flex items-center justify-center w-6 h-6 bg-blue-100 rounded-full -left-3 ring-8 ring-white dark:ring-gray-900 dark:bg-blue-900">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3 text-blue-800 dark:text-blue-300" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.414-1.414L11 9.586V6z" clipRule="evenodd" />
+                      </svg>
+                    </span>
+                    <time className="mb-1 text-sm font-normal leading-none text-gray-500">
+                      {new Date(event.timestamp).toLocaleString()}
+                    </time>
+                    <h4 className="text-lg font-semibold text-gray-900">
+                      {event.description}
+                    </h4>
+                    <p className="text-base font-normal text-gray-600">
+                      <span className="font-semibold">Actor:</span> <span className="break-all">{event.actor === ACTORS.FARMER ? 'Farmer (Initial Owner)' : event.actor === ACTORS.DISTRIBUTOR ? 'Distributor/Logistics' : event.actor}</span>
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // --- Render the App ---
+    const container = document.getElementById('root');
+    // Ensure ReactDOM is available globally
+    if (typeof ReactDOM !== 'undefined' && ReactDOM.createRoot) {
+        const root = ReactDOM.createRoot(container);
+        root.render(<App />);
+    } else {
+        console.error("ReactDOM.createRoot is not defined. Ensure React and ReactDOM CDN scripts are loaded correctly.");
+    }
+    </script>
+</body>
+</html>
